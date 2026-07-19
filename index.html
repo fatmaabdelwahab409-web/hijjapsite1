@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --bg:#F7F3EC;
@@ -168,9 +169,19 @@
     font-size:13px; font-weight:700; transition:background .2s;
   }
   .add-btn:hover{background:var(--camel);}
+  .add-btn:disabled{background:var(--line); color:var(--ink-soft); cursor:not-allowed;}
+  .stock-badge{display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; margin-top:8px;}
+  .stock-badge.out{background:#F3E1DE; color:#B0453C;}
+  .stock-badge.low{background:#FBF0DD; color:#A9761F;}
   .swatches{display:flex; gap:6px; margin-top:10px;}
   .swatch{width:16px; height:16px; border-radius:50%; border:1px solid rgba(0,0,0,0.15); cursor:pointer;}
   .swatch.selected{outline:2px solid var(--ink); outline-offset:2px;}
+  .size-row{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .size-btn{
+    min-width:30px; padding:4px 9px; border:1.5px solid var(--line); border-radius:4px;
+    font-size:12px; font-weight:700; background:var(--card); color:var(--ink);
+  }
+  .size-btn.selected{background:var(--ink); color:#fff; border-color:var(--ink);}
 
   /* trust strip */
   .trust{
@@ -293,15 +304,18 @@
   }
   .palette-chip.picked{border-color:var(--ink); transform:scale(1.1);}
   .admin-product-row{
-    display:flex; align-items:center; gap:14px; background:var(--card); border:1px solid var(--line);
+    display:flex; flex-wrap:wrap; align-items:center; gap:14px; background:var(--card); border:1px solid var(--line);
     border-radius:var(--radius); padding:12px 16px; margin-bottom:10px;
   }
   .admin-product-row img, .admin-product-row .thumb-fallback{
     width:50px; height:60px; border-radius:var(--radius); object-fit:cover; flex-shrink:0;
   }
-  .admin-product-row .info{flex:1;}
+  .admin-product-row .info{flex:1; min-width:140px;}
   .admin-product-row .info b{font-size:14.5px; display:block;}
   .admin-product-row .info span{font-size:12.5px; color:var(--ink-soft);}
+  .stock-edit{flex-basis:100%; display:flex; gap:8px; align-items:center; margin-top:6px;}
+  .stock-edit input{width:80px; padding:7px 10px; border:1.5px solid var(--line); border-radius:4px; background:var(--bg); color:var(--ink); font-size:13px;}
+  .stock-edit .btn-ghost{padding:7px 14px; font-size:12.5px;}
   .del-btn{color:#B0453C; font-size:13px; font-weight:700;}
   .toast{
     position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
@@ -381,7 +395,7 @@
       <h2>أحدث المنتجات</h2>
     </div>
     <div class="filters" id="filters"></div>
-    <div class="grid" id="productGrid"></div>
+    <div class="grid" id="productGrid"><p style="grid-column:1/-1; text-align:center; color:var(--ink-soft);">جاري تحميل المنتجات...</p></div>
   </div>
 </section>
 
@@ -489,16 +503,16 @@
   <div class="admin-wrap">
     <div class="pin-box" id="pinBox">
       <h2 style="margin-bottom:18px;">لوحة إدارة Hijap</h2>
-      <p style="color:var(--ink-soft); margin-bottom:20px; font-size:14px;">أدخلي كود الدخول لمشاهدة الطلبات</p>
-      <div class="field"><input type="password" id="pinInput" placeholder="••••"></div>
-      <button class="btn-primary" style="width:100%;" onclick="checkPin()">دخول</button>
-      <p style="margin-top:16px; font-size:12px; color:var(--ink-soft);">الكود الافتراضي: 1234</p>
+      <p style="color:var(--ink-soft); margin-bottom:20px; font-size:14px;">سجّلي دخول بحساب المديرة لمشاهدة الطلبات وإدارة المنتجات</p>
+      <div class="field" style="text-align:right;"><label>الإيميل</label><input type="email" id="adminEmail" placeholder="you@example.com"></div>
+      <div class="field" style="text-align:right;"><label>الباسورد</label><input type="password" id="adminPassword" placeholder="••••••••"></div>
+      <button class="btn-primary" style="width:100%;" onclick="adminLogin()">دخول</button>
       <button class="btn-ghost" style="width:100%; margin-top:20px;" onclick="closeAdmin()">رجوع للمتجر</button>
     </div>
     <div id="ordersPanel" style="display:none;">
       <div class="admin-header">
         <h2>لوحة إدارة Hijap</h2>
-        <button class="btn-ghost" onclick="closeAdmin()">خروج</button>
+        <button class="btn-ghost" onclick="adminLogout()">تسجيل الخروج</button>
       </div>
       <div class="admin-tabs">
         <button class="admin-tab-btn active" id="tabOrdersBtn" onclick="switchAdminTab('orders')">الطلبات</button>
@@ -538,6 +552,18 @@
           <div class="field">
             <label>الألوان المتاحة</label>
             <div class="palette-row" id="paletteRow"></div>
+            <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+              <input type="color" id="customColorPicker" value="#8a6d5a" style="width:40px; height:34px; border:1px solid var(--line); border-radius:4px; background:none; padding:2px;">
+              <button type="button" class="btn-ghost" style="padding:8px 16px; font-size:13px;" onclick="addCustomColor()">أضيفي لون مخصص</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>المقاسات (اختياري — افصلي بينهم بفاصلة، مثال: S, M, L أو 38, 40, 42)</label>
+            <input type="text" id="newProdSizes" placeholder="مثال: S, M, L">
+          </div>
+          <div class="field">
+            <label>الكمية المتاحة (اختياري — سيبيها فاضية لو مفيش حد للكمية)</label>
+            <input type="number" id="newProdStock" placeholder="مثال: 10" min="0">
           </div>
           <button class="btn-primary" style="width:100%; margin-top:6px;" onclick="addProduct()">إضافة المنتج</button>
         </div>
@@ -550,7 +576,9 @@
 </div>
 
 <script>
-/* ====== FIREBASE SETUP ====== */
+/* ====== FIREBASE SETUP — ضروري تحطي بياناتك هنا عشان الموقع يحفظ بشكل دائم ======
+   من غير الخطوة دي، أي منتج تضيفيه أو طلب هيتفتح في نفس الزيارة بس وهيروح بعد كده.
+   هتلاقي إزاي تجيبي القيم دي في الشرح اللي بعته معاها. */
 const firebaseConfig = {
   apiKey: "AIzaSyB0f4pcCuarb1N6lO_i4sILyU7epFPToXw",
   authDomain: "hijjapsite1.firebaseapp.com",
@@ -560,10 +588,12 @@ const firebaseConfig = {
   appId: "1:779019555583:web:e604a163a8864514a2b2ca"
 };
 let db = null;
+let auth = null;
 let firebaseReady = false;
 try{
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  auth = firebase.auth();
   firebaseReady = true;
 }catch(e){
   console.error('Firebase not configured yet', e);
@@ -590,12 +620,12 @@ let pendingImages = [];
 
 const DEPOSIT_AMOUNT = 50;
 const VF_CASH_NUMBER = '01020984826';
-const WHATSAPP_NUMBER = '201020984826';
-const ADMIN_PIN = '1234';
+const WHATSAPP_NUMBER = '201020984826'; // international format, no leading 0, Egypt code 20
 
-let cart = [];
+let cart = []; // {id, name, price, color, qty}
 let selectedColors = {};
 let selectedImgIdx = {};
+let selectedSizes = {};
 
 /* ---------------- render products ---------------- */
 function fmtPrice(n){ return n + ' ج.م'; }
@@ -616,16 +646,18 @@ async function loadProducts(){
   try{
     const snap = await db.collection('products').get();
     if(snap.empty){
+      // first time ever: seed with defaults
       const batch = db.batch();
       DEFAULT_PRODUCTS.forEach(p => {
+        const { id, ...data } = p;
         const ref = db.collection('products').doc();
-        batch.set(ref, p);
+        batch.set(ref, data);
       });
       await batch.commit();
       const snap2 = await db.collection('products').get();
-      PRODUCTS = snap2.docs.map(d => ({id:d.id, ...d.data()}));
+      PRODUCTS = snap2.docs.map(d => ({...d.data(), id:d.id}));
     } else {
-      PRODUCTS = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      PRODUCTS = snap.docs.map(d => ({...d.data(), id:d.id}));
     }
   }catch(e){
     console.error('loadProducts failed', e);
@@ -674,22 +706,39 @@ function renderProducts(cat='الكل'){
     } else {
       thumb = `<div class="product-thumb placeholder" style="background:linear-gradient(135deg, ${p.colors[0]}, ${p.colors[p.colors.length-1]})"></div>`;
     }
+    const outOfStock = (p.stock !== null && p.stock !== undefined && p.stock <= 0);
+    const lowStock = (p.stock !== null && p.stock !== undefined && p.stock > 0 && p.stock <= 5);
     return `
     <div class="product-card">
       ${thumb}
       <div class="product-info">
         <h3>${p.name}</h3>
         <span style="font-size:12.5px; color:var(--ink-soft);">${p.cat}</span>
+        ${outOfStock ? `<span class="stock-badge out">نفذت الكمية</span>` : ''}
+        ${lowStock ? `<span class="stock-badge low">متبقي ${p.stock} بس</span>` : ''}
         <div class="swatches">
           ${p.colors.map(c=>`<span class="swatch ${selectedColors[p.id]===c?'selected':''}" style="background:${c}" onclick="pickColor('${p.id}','${c}',this)"></span>`).join('')}
         </div>
+        ${(p.sizes && p.sizes.length) ? `
+        <div class="size-row">
+          ${p.sizes.map(s=>{
+            if(selectedSizes[p.id]===undefined) selectedSizes[p.id] = p.sizes[0];
+            return `<button type="button" class="size-btn ${selectedSizes[p.id]===s?'selected':''}" onclick="pickSize('${p.id}','${s}',this)">${s}</button>`;
+          }).join('')}
+        </div>` : ''}
         <div class="product-meta">
           <span class="price">${fmtPrice(p.price)}</span>
-          <button class="add-btn" onclick="addToCart('${p.id}')">أضيفي للسلة</button>
+          <button class="add-btn" ${outOfStock ? 'disabled' : ''} onclick="addToCart('${p.id}')">${outOfStock ? 'نفذت الكمية' : 'أضيفي للسلة'}</button>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+function pickSize(id, size, el){
+  selectedSizes[id] = size;
+  el.parentElement.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
 }
 
 function switchProdImg(id, idx){
@@ -706,17 +755,36 @@ function pickColor(id, color, el){
 /* ---------------- cart ---------------- */
 function addToCart(id){
   const p = PRODUCTS.find(x=>x.id===id);
+  if(p.stock !== null && p.stock !== undefined){
+    const alreadyInCart = cart.filter(c=>c.id===id).reduce((s,c)=>s+c.qty,0);
+    if(alreadyInCart >= p.stock){
+      showToast('الكمية المتاحة من المنتج ده خلصت');
+      return;
+    }
+  }
   const color = selectedColors[id];
+  const size = selectedSizes[id] || null;
   const imgs = productImages(p);
   const mainImage = imgs.length ? imgs[selectedImgIdx[id] || 0] : null;
-  const existing = cart.find(c=>c.id===id && c.color===color);
+  const existing = cart.find(c=>c.id===id && c.color===color && c.size===size);
   if(existing){ existing.qty++; }
-  else{ cart.push({id:p.id, name:p.name, price:p.price, color, image:mainImage, qty:1}); }
+  else{ cart.push({id:p.id, name:p.name, price:p.price, color, size, image:mainImage, qty:1}); }
   updateCartUI();
   showToast('اتضافت للسلة ✓');
 }
 
 function changeQty(idx, delta){
+  if(delta > 0){
+    const item = cart[idx];
+    const p = PRODUCTS.find(x=>x.id===item.id);
+    if(p && p.stock !== null && p.stock !== undefined){
+      const totalForProduct = cart.filter(c=>c.id===item.id).reduce((s,c)=>s+c.qty,0);
+      if(totalForProduct >= p.stock){
+        showToast('الكمية المتاحة من المنتج ده خلصت');
+        return;
+      }
+    }
+  }
   cart[idx].qty += delta;
   if(cart[idx].qty <= 0) cart.splice(idx,1);
   updateCartUI();
@@ -747,7 +815,7 @@ function updateCartUI(){
       <div class="cart-thumb" style="${c.image ? `background-image:url('${c.image}'); background-size:cover; background-position:center;` : `background:${c.color};`}"></div>
       <div class="cart-item-info">
         <h4>${c.name}</h4>
-        <span>اللون المختار</span>
+        <span>${c.size ? 'مقاس ' + c.size : 'اللون المختار'}</span>
         <div class="qty-row">
           <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
           <span>${c.qty}</span>
@@ -774,7 +842,7 @@ function openCheckout(){
   if(cart.length===0) return;
   const total = cartTotal();
   document.getElementById('checkoutSummary').innerHTML = cart.map(c=>
-    `<div><span>${c.name} × ${c.qty}</span><span>${fmtPrice(c.price*c.qty)}</span></div>`
+    `<div><span>${c.name}${c.size ? ' (مقاس '+c.size+')' : ''} × ${c.qty}</span><span>${fmtPrice(c.price*c.qty)}</span></div>`
   ).join('') + `<div class="total-line"><span>الإجمالي</span><span>${fmtPrice(total)}</span></div>`;
   document.getElementById('depositAmount').textContent = fmtPrice(DEPOSIT_AMOUNT);
   document.getElementById('remainingAmount').textContent = Math.max(total - DEPOSIT_AMOUNT, 0);
@@ -789,10 +857,7 @@ function closeAll(){
   document.getElementById('checkoutModal').classList.remove('show');
   document.getElementById('confirmModal').classList.remove('show');
 }
-
-// تعديل الدالة لعرض التنبيه في نافذة منبثقة واضحة على الموبايل
 function showToast(msg){
-  alert(msg); 
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
@@ -812,11 +877,20 @@ async function submitOrder(){
     showToast('من فضلك املأي كل الحقول المطلوبة');
     return;
   }
+  const phonePattern = /^01[0125][0-9]{8}$/;
+  if(!phonePattern.test(phone.replace(/\s|-/g,''))){
+    showToast('رقم الموبايل لازم يبقى 11 رقم ويبدأ بـ 01');
+    return;
+  }
+  if(!phonePattern.test(vfCash.replace(/\s|-/g,''))){
+    showToast('رقم فودافون كاش لازم يبقى 11 رقم ويبدأ بـ 01');
+    return;
+  }
 
   const orderId = 'HJ' + Date.now().toString().slice(-6);
   const order = {
     orderId, name, phone, city, address, notes, vfCash,
-    items: cart.map(c=>({name:c.name, color:c.color, qty:c.qty, price:c.price})),
+    items: cart.map(c=>({name:c.name, color:c.color, size:c.size||null, qty:c.qty, price:c.price})),
     total: cartTotal(),
     deposit: DEPOSIT_AMOUNT,
     remaining: Math.max(cartTotal()-DEPOSIT_AMOUNT,0),
@@ -824,15 +898,10 @@ async function submitOrder(){
     createdAt: new Date().toISOString()
   };
 
-  if(firebaseReady){
-    try{
-      await db.collection('orders').add(order);
-    }catch(e){
-      console.error('order save failed', e);
-    }
-  }
-
-  const itemsText = cart.map(c => `${c.name} × ${c.qty} — ${fmtPrice(c.price*c.qty)}`).join('%0A');
+  // build WhatsApp message with full order details and open it immediately —
+  // must happen synchronously within the click handler, before any 'await',
+  // or mobile browsers will block the popup.
+  const itemsText = cart.map(c => `${c.name}${c.size ? ' (مقاس '+c.size+')' : ''} × ${c.qty} — ${fmtPrice(c.price*c.qty)}`).join('%0A');
   const waMessage =
     `طلب جديد من Hijap*%0A` +
     `رقم الطلب: ${orderId}%0A%0A` +
@@ -848,6 +917,18 @@ async function submitOrder(){
   const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}`;
   window.open(waLink, '_blank');
 
+  if(firebaseReady){
+    db.collection('orders').add(order).catch(e => console.error('order save failed', e));
+    cart.forEach(item => {
+      const p = PRODUCTS.find(x=>x.id===item.id);
+      if(p && p.stock !== null && p.stock !== undefined){
+        db.collection('products').doc(item.id)
+          .update({ stock: firebase.firestore.FieldValue.increment(-item.qty) })
+          .catch(e => console.error('stock update failed', e));
+      }
+    });
+  }
+
   document.getElementById('orderNumber').textContent = '#' + orderId;
   cart = [];
   updateCartUI();
@@ -860,22 +941,43 @@ async function submitOrder(){
 function openAdmin(){
   document.getElementById('storeView').style.display = 'none';
   document.getElementById('adminView').classList.add('show');
-}
-function closeAdmin(){
-  document.getElementById('adminView').classList.remove('show');
-  document.getElementById('storeView').style.display = 'block';
-  document.getElementById('pinBox').style.display = 'block';
-  document.getElementById('ordersPanel').style.display = 'none';
-  document.getElementById('pinInput').value = '';
-}
-function checkPin(){
-  if(document.getElementById('pinInput').value === ADMIN_PIN){
+  if(firebaseReady && auth.currentUser){
     document.getElementById('pinBox').style.display = 'none';
     document.getElementById('ordersPanel').style.display = 'block';
     switchAdminTab('orders');
   } else {
-    showToast('كود غير صحيح');
+    document.getElementById('pinBox').style.display = 'block';
+    document.getElementById('ordersPanel').style.display = 'none';
   }
+}
+function closeAdmin(){
+  document.getElementById('adminView').classList.remove('show');
+  document.getElementById('storeView').style.display = 'block';
+}
+async function adminLogin(){
+  if(!firebaseReady){
+    showToast('⚠️ Firebase مش متظبط لسه');
+    return;
+  }
+  const email = document.getElementById('adminEmail').value.trim();
+  const password = document.getElementById('adminPassword').value;
+  if(!email || !password){
+    showToast('اكتبي الإيميل والباسورد');
+    return;
+  }
+  try{
+    await auth.signInWithEmailAndPassword(email, password);
+    document.getElementById('adminPassword').value = '';
+    document.getElementById('pinBox').style.display = 'none';
+    document.getElementById('ordersPanel').style.display = 'block';
+    switchAdminTab('orders');
+  }catch(e){
+    showToast('بيانات الدخول غلط');
+  }
+}
+function adminLogout(){
+  if(firebaseReady) auth.signOut();
+  closeAdmin();
 }
 function switchAdminTab(tab){
   document.getElementById('tabOrdersBtn').classList.toggle('active', tab==='orders');
@@ -888,7 +990,7 @@ function switchAdminTab(tab){
 async function loadOrders(){
   const list = document.getElementById('ordersList');
   if(!firebaseReady){
-    list.innerHTML = '<p style="color:var(--ink-soft);">⚠️ لازم تظبطي إعدادات Firebase الأول عشان الطلبات تتحفظ وتتعرض هنا.</p>';
+    list.innerHTML = '<p style="color:var(--ink-soft);">⚠️ لازم تظبطي إعدادات Firebase الأول عشان الطلبات تتحفظ وتتعرض هنا. لحد ما تظبطيها، الطلبات لسه بتوصلك على واتساب عادي.</p>';
     return;
   }
   list.innerHTML = '<p style="color:var(--ink-soft);">جاري التحميل...</p>';
@@ -923,9 +1025,15 @@ async function loadOrders(){
 /* ---------------- admin: product management ---------------- */
 function renderPaletteRow(){
   const row = document.getElementById('paletteRow');
-  row.innerHTML = PALETTE.map(c => `
+  const presetHexes = PALETTE.map(c=>c.hex);
+  const customHexes = pickedColors.filter(h => !presetHexes.includes(h));
+  const presetChips = PALETTE.map(c => `
     <span class="palette-chip ${pickedColors.includes(c.hex)?'picked':''}" style="background:${c.hex}" title="${c.name}" onclick="togglePaletteColor('${c.hex}', this)"></span>
   `).join('');
+  const customChips = customHexes.map(hex => `
+    <span class="palette-chip picked" style="background:${hex}" title="لون مخصص — دوسي للحذف" onclick="removeCustomColor('${hex}')"></span>
+  `).join('');
+  row.innerHTML = presetChips + customChips;
 }
 function togglePaletteColor(hex, el){
   if(pickedColors.includes(hex)){
@@ -934,6 +1042,17 @@ function togglePaletteColor(hex, el){
     pickedColors.push(hex);
   }
   el.classList.toggle('picked');
+}
+function addCustomColor(){
+  const hex = document.getElementById('customColorPicker').value;
+  if(!pickedColors.includes(hex)){
+    pickedColors.push(hex);
+    renderPaletteRow();
+  }
+}
+function removeCustomColor(hex){
+  pickedColors = pickedColors.filter(h=>h!==hex);
+  renderPaletteRow();
 }
 
 function handleImageSelect(e){
@@ -958,7 +1077,7 @@ function handleImageSelect(e){
     };
     reader.readAsDataURL(file);
   });
-  e.target.value = '';
+  e.target.value = ''; // allow re-selecting the same file later
 }
 
 function renderImgPreviewStrip(){
@@ -979,7 +1098,7 @@ function removePendingImage(i){
 
 async function addProduct(){
   if(!firebaseReady){
-    showToast('⚠️ لسه محتاجة تظبطي بيانات Firebase الأول عشان تضيفي منتجات');
+    showToast('⚠️ لازم تظبطي إعدادات Firebase الأول عشان تضيفي منتجات');
     return;
   }
   const name = document.getElementById('newProdName').value.trim();
@@ -991,20 +1110,27 @@ async function addProduct(){
     return;
   }
   const colors = pickedColors.length ? [...pickedColors] : [PALETTE[0].hex];
+  const sizes = document.getElementById('newProdSizes').value
+    .split(',').map(s=>s.trim()).filter(Boolean);
+  const stockRaw = document.getElementById('newProdStock').value.trim();
+  const stock = stockRaw === '' ? null : Math.max(0, parseInt(stockRaw, 10));
 
-  const product = { name, price, cat, colors, images: [...pendingImages] };
+  const product = { name, price, cat, colors, sizes, stock, images: [...pendingImages] };
 
   try{
     await db.collection('products').add(product);
   }catch(e){
     console.error('addProduct failed', e);
-    showToast('حصل خطأ في حفظ المنتج: ' + e.message);
+    showToast('حصل خطأ في حفظ المنتج، جربي تاني');
     return;
   }
 
+  // reset form
   document.getElementById('newProdName').value = '';
   document.getElementById('newProdPrice').value = '';
   document.getElementById('newProdCat').value = '';
+  document.getElementById('newProdSizes').value = '';
+  document.getElementById('newProdStock').value = '';
   pendingImages = [];
   renderImgPreviewStrip();
   pickedColors = [PALETTE[0].hex, PALETTE[3].hex];
@@ -1029,6 +1155,7 @@ async function deleteProduct(id){
 
 function renderAdminProducts(){
   renderPaletteRow();
+  // populate category suggestions
   const cats = [...new Set(PRODUCTS.map(p=>p.cat))];
   document.getElementById('catList').innerHTML = cats.map(c=>`<option value="${c}">`).join('');
 
@@ -1043,21 +1170,63 @@ function renderAdminProducts(){
     const thumb = imgs.length
       ? `<img src="${imgs[0]}" alt="${p.name}">`
       : `<div class="thumb-fallback" style="background:linear-gradient(135deg, ${p.colors[0]}, ${p.colors[p.colors.length-1]})"></div>`;
+    const stockLabel = (p.stock === null || p.stock === undefined) ? 'غير محدودة' : p.stock;
     return `
     <div class="admin-product-row">
       ${thumb}
       <div class="info">
         <b>${p.name}</b>
-        <span>${p.cat} — ${fmtPrice(p.price)}${imgs.length>1 ? ` — ${imgs.length} صور` : ''}</span>
+        <span>${p.cat} — ${fmtPrice(p.price)}${imgs.length>1 ? ` — ${imgs.length} صور` : ''}${(p.sizes && p.sizes.length) ? ` — مقاسات: ${p.sizes.join('، ')}` : ''} — الكمية: ${stockLabel}</span>
       </div>
       <button class="del-btn" onclick="deleteProduct('${p.id}')">حذف</button>
+      <div class="stock-edit">
+        <input type="number" id="stockInput-${p.id}" value="${p.stock ?? ''}" placeholder="بلا حدود" min="0">
+        <button class="btn-ghost" onclick="updateStock('${p.id}')">تحديث الكمية</button>
+      </div>
     </div>`;
   }).join('');
 }
 
+async function updateStock(id){
+  const input = document.getElementById('stockInput-'+id);
+  const val = input.value.trim();
+  const newStock = val === '' ? null : Math.max(0, parseInt(val, 10));
+  try{
+    await db.collection('products').doc(id).update({ stock: newStock });
+    await loadProducts();
+    renderAdminProducts();
+    showToast('اتحدثت الكمية ✓');
+  }catch(e){
+    console.error('updateStock failed', e);
+    showToast('حصل خطأ، جربي تاني');
+  }
+}
+
+/* ---------------- error diagnostics (visible on-page banner) ---------------- */
+window.addEventListener('error', function(e){
+  showDiagBanner('خطأ في الكود: ' + (e.message || 'غير معروف') + ' (سطر ' + (e.lineno||'?') + ')');
+});
+window.addEventListener('unhandledrejection', function(e){
+  showDiagBanner('خطأ غير متوقع: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+});
+function showDiagBanner(msg){
+  let el = document.getElementById('diagBanner');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'diagBanner';
+    el.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:9999; background:#B0453C; color:#fff; padding:10px 16px; font-size:13px; text-align:center; direction:ltr; word-break:break-word;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+}
+
 /* ---------------- init ---------------- */
-loadProducts();
-updateCartUI();
+try{
+  loadProducts();
+  updateCartUI();
+}catch(e){
+  showDiagBanner('خطأ في التحميل: ' + e.message);
+}
 </script>
 </body>
-  </html>
+</html>
