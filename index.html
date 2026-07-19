@@ -550,9 +550,7 @@
 </div>
 
 <script>
-/* ====== FIREBASE SETUP — ضروري تحطي بياناتك هنا عشان الموقع يحفظ بشكل دائم ======
-   من غير الخطوة دي، أي منتج تضيفيه أو طلب هيتفتح في نفس الزيارة بس وهيروح بعد كده.
-   هتلاقي إزاي تجيبي القيم دي في الشرح اللي بعته معاها. */
+/* ====== FIREBASE SETUP ====== */
 const firebaseConfig = {
   apiKey: "AIzaSyB0f4pcCuarb1N6lO_i4sILyU7epFPToXw",
   authDomain: "hijjapsite1.firebaseapp.com",
@@ -592,10 +590,10 @@ let pendingImages = [];
 
 const DEPOSIT_AMOUNT = 50;
 const VF_CASH_NUMBER = '01020984826';
-const WHATSAPP_NUMBER = '201020984826'; // international format, no leading 0, Egypt code 20
+const WHATSAPP_NUMBER = '201020984826';
 const ADMIN_PIN = '1234';
 
-let cart = []; // {id, name, price, color, qty}
+let cart = [];
 let selectedColors = {};
 let selectedImgIdx = {};
 
@@ -618,7 +616,6 @@ async function loadProducts(){
   try{
     const snap = await db.collection('products').get();
     if(snap.empty){
-      // first time ever: seed with defaults
       const batch = db.batch();
       DEFAULT_PRODUCTS.forEach(p => {
         const ref = db.collection('products').doc();
@@ -792,7 +789,10 @@ function closeAll(){
   document.getElementById('checkoutModal').classList.remove('show');
   document.getElementById('confirmModal').classList.remove('show');
 }
+
+// تعديل الدالة لعرض التنبيه في نافذة منبثقة واضحة على الموبايل
 function showToast(msg){
+  alert(msg); 
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
@@ -832,7 +832,6 @@ async function submitOrder(){
     }
   }
 
-  // build WhatsApp message with full order details and open it for the customer to send
   const itemsText = cart.map(c => `${c.name} × ${c.qty} — ${fmtPrice(c.price*c.qty)}`).join('%0A');
   const waMessage =
     `طلب جديد من Hijap*%0A` +
@@ -889,7 +888,7 @@ function switchAdminTab(tab){
 async function loadOrders(){
   const list = document.getElementById('ordersList');
   if(!firebaseReady){
-    list.innerHTML = '<p style="color:var(--ink-soft);">⚠️ لازم تظبطي إعدادات Firebase الأول عشان الطلبات تتحفظ وتتعرض هنا. لحد ما تظبطيها، الطلبات لسه بتوصلك على واتساب عادي.</p>';
+    list.innerHTML = '<p style="color:var(--ink-soft);">⚠️ لازم تظبطي إعدادات Firebase الأول عشان الطلبات تتحفظ وتتعرض هنا.</p>';
     return;
   }
   list.innerHTML = '<p style="color:var(--ink-soft);">جاري التحميل...</p>';
@@ -959,7 +958,7 @@ function handleImageSelect(e){
     };
     reader.readAsDataURL(file);
   });
-  e.target.value = ''; // allow re-selecting the same file later
+  e.target.value = '';
 }
 
 function renderImgPreviewStrip(){
@@ -980,7 +979,7 @@ function removePendingImage(i){
 
 async function addProduct(){
   if(!firebaseReady){
-    showToast('⚠️ لازم تظبطي إعدادات Firebase الأول عشان تضيفي منتجات');
+    showToast('⚠️ لسه محتاجة تظبطي بيانات Firebase الأول عشان تضيفي منتجات');
     return;
   }
   const name = document.getElementById('newProdName').value.trim();
@@ -999,11 +998,10 @@ async function addProduct(){
     await db.collection('products').add(product);
   }catch(e){
     console.error('addProduct failed', e);
-    showToast('حصل خطأ في حفظ المنتج، جربي تاني');
+    showToast('حصل خطأ في حفظ المنتج: ' + e.message);
     return;
   }
 
-  // reset form
   document.getElementById('newProdName').value = '';
   document.getElementById('newProdPrice').value = '';
   document.getElementById('newProdCat').value = '';
@@ -1031,7 +1029,6 @@ async function deleteProduct(id){
 
 function renderAdminProducts(){
   renderPaletteRow();
-  // populate category suggestions
   const cats = [...new Set(PRODUCTS.map(p=>p.cat))];
   document.getElementById('catList').innerHTML = cats.map(c=>`<option value="${c}">`).join('');
 
@@ -1063,4 +1060,4 @@ loadProducts();
 updateCartUI();
 </script>
 </body>
-</html>
+  </html>
