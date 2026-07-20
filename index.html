@@ -639,6 +639,10 @@ let selectedSizes = {};
 
 /* ---------------- render products ---------------- */
 function fmtPrice(n){ return n + ' ج.م'; }
+function withTimeout(promise, ms=10000){
+  const timeout = new Promise((_, reject) => setTimeout(()=>reject(new Error('timeout')), ms));
+  return Promise.race([promise, timeout]);
+}
 function productImages(p){
   if(p.images && p.images.length) return p.images;
   if(p.image) return [p.image];
@@ -1015,13 +1019,17 @@ async function adminLogin(){
     return;
   }
   try{
-    await auth.signInWithEmailAndPassword(email, password);
+    await withTimeout(auth.signInWithEmailAndPassword(email, password));
     document.getElementById('adminPassword').value = '';
     document.getElementById('pinBox').style.display = 'none';
     document.getElementById('ordersPanel').style.display = 'block';
     switchAdminTab('orders');
   }catch(e){
-    showToast('بيانات الدخول غلط');
+    if(e.message === 'timeout'){
+      showToast('مافيش رد من السيرفر، جربي تاني أو غيّري الشبكة');
+    } else {
+      showToast('بيانات الدخول غلط');
+    }
   }
 }
 function adminLogout(){
@@ -1168,10 +1176,10 @@ async function addProduct(){
   const product = { name, price, cat, colors, sizes, stock, images: [...pendingImages] };
 
   try{
-    await db.collection('products').add(product);
+    await withTimeout(db.collection('products').add(product));
   }catch(e){
     console.error('addProduct failed', e);
-    showToast('حصل خطأ في حفظ المنتج، جربي تاني');
+    showToast(e.message === 'timeout' ? 'مافيش رد من السيرفر، جربي تاني أو غيّري الشبكة' : 'حصل خطأ في حفظ المنتج، جربي تاني');
     return;
   }
 
@@ -1193,7 +1201,7 @@ async function addProduct(){
 async function deleteProduct(id){
   if(!firebaseReady) return;
   try{
-    await db.collection('products').doc(id).delete();
+    await withTimeout(db.collection('products').doc(id).delete());
   }catch(e){
     console.error('deleteProduct failed', e);
     showToast('حصل خطأ في الحذف، جربي تاني');
@@ -1242,7 +1250,7 @@ async function updateStock(id){
   const val = input.value.trim();
   const newStock = val === '' ? null : Math.max(0, parseInt(val, 10));
   try{
-    await db.collection('products').doc(id).update({ stock: newStock });
+    await withTimeout(db.collection('products').doc(id).update({ stock: newStock }));
     await loadProducts();
     renderAdminProducts();
     showToast('اتحدثت الكمية ✓');
