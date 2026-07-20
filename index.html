@@ -486,6 +486,15 @@
   </div>
 </div>
 
+<!-- PRODUCT DETAIL MODAL -->
+<div class="modal" id="productDetailModal">
+  <div class="modal-head">
+    <h3 id="pdName" style="font-size:20px;"></h3>
+    <button class="close-btn" onclick="closeAll()">✕</button>
+  </div>
+  <div class="modal-body" id="pdBody"></div>
+</div>
+
 <!-- CONFIRMATION MODAL -->
 <div class="modal" id="confirmModal">
   <div class="modal-body" style="text-align:center; padding-top:36px;">
@@ -619,7 +628,7 @@ let PRODUCTS = [];
 let pickedColors = [PALETTE[0].hex, PALETTE[3].hex];
 let pendingImages = [];
 
-const DEPOSIT_AMOUNT = 50;
+const DEPOSIT_AMOUNT = 100;
 const VF_CASH_NUMBER = '01020984826';
 const WHATSAPP_NUMBER = '201020984826'; // international format, no leading 0, Egypt code 20
 
@@ -638,7 +647,7 @@ function productImages(p){
 
 async function loadProducts(){
   if(!firebaseReady){
-    PRODUCTS = DEFAULT_PRODUCTS;
+    PRODUCTS = [];
     renderFilters();
     renderProducts();
     showToast('⚠️ لسه محتاجة تظبطي بيانات Firebase عشان المنتجات تتحفظ');
@@ -647,24 +656,11 @@ async function loadProducts(){
   try{
     const timeout = (ms) => new Promise((_, reject) => setTimeout(()=>reject(new Error('timeout')), ms));
     const snap = await Promise.race([db.collection('products').get(), timeout(10000)]);
-    if(snap.empty){
-      // first time ever: seed with defaults
-      const batch = db.batch();
-      DEFAULT_PRODUCTS.forEach(p => {
-        const { id, ...data } = p;
-        const ref = db.collection('products').doc();
-        batch.set(ref, data);
-      });
-      await Promise.race([batch.commit(), timeout(10000)]);
-      const snap2 = await Promise.race([db.collection('products').get(), timeout(10000)]);
-      PRODUCTS = snap2.docs.map(d => ({...d.data(), id:d.id}));
-    } else {
-      PRODUCTS = snap.docs.map(d => ({...d.data(), id:d.id}));
-    }
+    PRODUCTS = snap.docs.map(d => ({...d.data(), id:d.id}));
   }catch(e){
     console.error('loadProducts failed', e);
-    PRODUCTS = DEFAULT_PRODUCTS;
-    showToast('حصل خطأ في تحميل المنتجات');
+    PRODUCTS = [];
+    showToast('حصل خطأ في تحميل المنتجات، جربي تحدّثي الصفحة');
   }
   renderFilters();
   renderProducts();
@@ -704,9 +700,9 @@ function renderProducts(cat='الكل'){
       const dots = imgs.length > 1
         ? `<div class="thumb-dots">${imgs.map((im,i)=>`<span class="thumb-dot ${i===curIdx?'active':''}" onclick="event.stopPropagation(); switchProdImg('${p.id}', ${i})"></span>`).join('')}</div>`
         : '';
-      thumb = `<div class="product-thumb"><img src="${imgs[curIdx]}" alt="${p.name}" loading="lazy">${dots}</div>`;
+      thumb = `<div class="product-thumb" style="cursor:pointer;" onclick="openProductDetail('${p.id}')"><img src="${imgs[curIdx]}" alt="${p.name}" loading="lazy">${dots}</div>`;
     } else {
-      thumb = `<div class="product-thumb placeholder" style="background:linear-gradient(135deg, ${p.colors[0]}, ${p.colors[p.colors.length-1]})"></div>`;
+      thumb = `<div class="product-thumb placeholder" style="cursor:pointer; background:linear-gradient(135deg, ${p.colors[0]}, ${p.colors[p.colors.length-1]})" onclick="openProductDetail('${p.id}')"></div>`;
     }
     const outOfStock = (p.stock !== null && p.stock !== undefined && p.stock <= 0);
     const lowStock = (p.stock !== null && p.stock !== undefined && p.stock > 0 && p.stock <= 5);
@@ -746,6 +742,56 @@ function pickSize(id, size, el){
 function switchProdImg(id, idx){
   selectedImgIdx[id] = idx;
   renderProducts(document.querySelector('.filter-btn.active')?.dataset.cat || 'الكل');
+  if(document.getElementById('productDetailModal').classList.contains('show')){
+    renderProductDetailBody(id);
+  }
+}
+
+function openProductDetail(id){
+  renderProductDetailBody(id);
+  document.getElementById('productDetailModal').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+
+function renderProductDetailBody(id){
+  const p = PRODUCTS.find(x=>x.id===id);
+  if(!p) return;
+  if(selectedImgIdx[id] === undefined) selectedImgIdx[id] = 0;
+  const imgs = productImages(p);
+  const curIdx = selectedImgIdx[id];
+  const outOfStock = (p.stock !== null && p.stock !== undefined && p.stock <= 0);
+  const lowStock = (p.stock !== null && p.stock !== undefined && p.stock > 0 && p.stock <= 5);
+
+  const bigImage = imgs.length
+    ? `<div style="position:relative;">
+        <div style="aspect-ratio:4/5; border-radius:var(--radius); overflow:hidden; background:${p.colors[0]};">
+          <img src="${imgs[curIdx]}" alt="${p.name}" style="width:100%; height:100%; object-fit:cover;">
+        </div>
+        ${imgs.length > 1 ? `<div class="thumb-dots" style="position:static; margin-top:10px;">${imgs.map((im,i)=>`<span class="thumb-dot" style="background:${i===curIdx?'var(--ink)':'var(--line)'};" onclick="switchProdImg('${p.id}', ${i})"></span>`).join('')}</div>` : ''}
+      </div>`
+    : `<div style="aspect-ratio:4/5; border-radius:var(--radius); background:linear-gradient(135deg, ${p.colors[0]}, ${p.colors[p.colors.length-1]});"></div>`;
+
+  document.getElementById('pdName').textContent = p.name;
+  document.getElementById('pdBody').innerHTML = `
+    ${bigImage}
+    <div style="margin-top:16px;">
+      <span style="font-size:12.5px; color:var(--ink-soft);">${p.cat}</span>
+      ${outOfStock ? `<span class="stock-badge out" style="display:block; width:fit-content; margin-top:6px;">نفذت الكمية</span>` : ''}
+      ${lowStock ? `<span class="stock-badge low" style="display:block; width:fit-content; margin-top:6px;">متبقي ${p.stock} بس</span>` : ''}
+      <div class="price" style="font-size:22px; margin-top:10px;">${fmtPrice(p.price)}</div>
+      <div class="swatches" style="margin-top:14px;">
+        ${p.colors.map(c=>`<span class="swatch ${selectedColors[p.id]===c?'selected':''}" style="width:24px; height:24px; background:${c}" onclick="pickColor('${p.id}','${c}',this)"></span>`).join('')}
+      </div>
+      ${(p.sizes && p.sizes.length) ? `
+      <div class="size-row" style="margin-top:10px;">
+        ${p.sizes.map(s=>{
+          if(selectedSizes[p.id]===undefined) selectedSizes[p.id] = p.sizes[0];
+          return `<button type="button" class="size-btn ${selectedSizes[p.id]===s?'selected':''}" onclick="pickSize('${p.id}','${s}',this)">${s}</button>`;
+        }).join('')}
+      </div>` : ''}
+      <button class="btn-primary" style="width:100%; margin-top:20px;" ${outOfStock ? 'disabled' : ''} onclick="addToCart('${p.id}')">${outOfStock ? 'نفذت الكمية' : 'أضيفي للسلة'}</button>
+    </div>
+  `;
 }
 
 function pickColor(id, color, el){
@@ -858,6 +904,7 @@ function closeAll(){
   document.getElementById('cartDrawer').classList.remove('show');
   document.getElementById('checkoutModal').classList.remove('show');
   document.getElementById('confirmModal').classList.remove('show');
+  document.getElementById('productDetailModal').classList.remove('show');
 }
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -997,7 +1044,8 @@ async function loadOrders(){
   }
   list.innerHTML = '<p style="color:var(--ink-soft);">جاري التحميل...</p>';
   try{
-    const snap = await db.collection('orders').orderBy('createdAt', 'desc').get();
+    const timeout = (ms) => new Promise((_, reject) => setTimeout(()=>reject(new Error('timeout')), ms));
+    const snap = await Promise.race([db.collection('orders').orderBy('createdAt', 'desc').get(), timeout(10000)]);
     if(snap.empty){
       list.innerHTML = '<p style="color:var(--ink-soft);">لسه مفيش طلبات.</p>';
       return;
@@ -1011,7 +1059,7 @@ async function loadOrders(){
         </div>
         <div class="order-detail">
           📞 ${o.phone} &nbsp;|&nbsp; 📍 ${o.city} — ${o.address}<br>
-          🛍️ ${o.items.map(i=>`${i.name} ×${i.qty}`).join('، ')}<br>
+          🛍️ ${o.items.map(i=>`${i.name}${i.size ? ' (مقاس '+i.size+')' : ''} ×${i.qty}`).join('، ')}<br>
           💰 الإجمالي ${fmtPrice(o.total)} — عربون ${fmtPrice(o.deposit)} من رقم ${o.vfCash} — المتبقي ${fmtPrice(o.remaining)}<br>
           ${o.notes ? '📝 '+o.notes+'<br>' : ''}
           🕒 ${new Date(o.createdAt).toLocaleString('ar-EG')}
@@ -1019,7 +1067,7 @@ async function loadOrders(){
       </div>
     `).join('');
   }catch(e){
-    list.innerHTML = '<p style="color:var(--ink-soft);">حصل خطأ في تحميل الطلبات.</p>';
+    list.innerHTML = '<p style="color:var(--ink-soft);">حصل خطأ في تحميل الطلبات — جربي تدوسي "تحديث" تاني.</p>';
     console.error(e);
   }
 }
